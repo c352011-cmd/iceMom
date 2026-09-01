@@ -1,0 +1,1534 @@
+@font-face {
+  font-family: "OnulDanjo-Regular";
+  src: url("OnulDanjo-Regular.otf") format("opentype");
+  font-weight: 00;
+  font-style: normal;
+}
+
+:root {
+  --canvas-w: 1080px;
+  --canvas-h: 1920px;
+  --detail-pad: 30px; /* 상세화면 공통 여백 — 이 값 하나만 바꾸면 전체가 같이 바뀜 */
+  --y-cols: 2fr 1fr;
+  --pu-cols: 2fr 1fr;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: #ffffff;
+  overflow: hidden;
+  font-family: "DesignMag Sans", "OnulDanjo-Regular", sans-serif;
+}
+
+#stage {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#canvas-wrapper {
+  width: var(--canvas-w);
+  height: var(--canvas-h);
+  transform-origin: center center;
+}
+
+#canvas {
+  position: relative;
+  width: var(--canvas-w);
+  height: var(--canvas-h);
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.col {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.col-left {
+  width: 633px;
+}
+.col-right {
+  width: 447px;
+}
+
+.cell-placeholder {
+  flex-shrink: 0;
+}
+
+.cell {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 28px;
+  color: rgba(255, 255, 255);
+  -webkit-backdrop-filter: blur(14.95px);
+  backdrop-filter: blur(14.95px);
+}
+
+.cell-summary {
+  position: absolute;
+  inset: 0;
+  transition: opacity 0.2s ease;
+}
+.cell.is-active .cell-summary {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.collage {
+  position: absolute;
+  inset: 20px 20px 20px 20px;
+  overflow: hidden;
+}
+
+.collage-img {
+  position: absolute;
+  max-width: 78%; /* 원본 크기가 칸보다 큰 이미지가 여백 밖으로 잘리지 않도록 하는 상한선 (모든 칸 공통, 랜덤 아님) */
+  height: auto;
+  opacity: 1;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  transition:
+    opacity 0.3s ease,
+    filter 0.2s ease;
+  will-change: transform;
+  filter: brightness(1);
+}
+
+/* 칸에 마우스를 올리면(collage.js가 붙이는 is-collage-hover) 이미지가 검정 실루엣이 됨 */
+.cell.is-collage-hover .collage-img {
+  filter: brightness(0);
+}
+
+.collage-label {
+  position: absolute;
+  margin: 0;
+  font-weight: 800;
+  line-height: 0.86;
+  font-size: 44px;
+  color: rgba(0, 0, 0);
+  opacity: 1;
+  pointer-events: none;
+  user-select: none;
+  transition:
+    transform 0.5s cubic-bezier(0.22, 0.61, 0.36, 1),
+    opacity 0.3s ease;
+  will-change: transform;
+}
+
+.cell-green {
+  flex: 0 0 1179px;
+  background: linear-gradient(180deg, #00ff2d 44.25%, #fff 100%);
+}
+.cell-purple {
+  flex: 0 0 363px;
+  background: radial-gradient(
+    100% 100% at 50% 100%,
+    rgb(255, 255, 255) 10%,
+    rgba(205, 63, 255) 100%
+  );
+}
+.cell-pink {
+  flex: 0 0 189px;
+  background: linear-gradient(
+    0deg,
+    rgba(255, 255, 255) 5%,
+    rgba(255, 0, 191) 100%
+  );
+}
+.cell-blue-1 {
+  flex: 0 0 361px;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 241, 255) -22.48%,
+    rgba(255, 255, 255) 100%
+  );
+}
+.cell-blue-2 {
+  flex: 0 0 509px;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 241, 255) -22.48%,
+    rgba(255, 255, 255) 100%
+  );
+}
+.cell-yellow {
+  flex: 0 0 1050px;
+  background: radial-gradient(
+    155.82% 214.53% at -18.82% 12.53%,
+    #fff 10%,
+    #f6ff00 100%
+  );
+}
+
+/* ===== 상세화면(전체화면) ===== */
+.cell-detail {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1080px;
+  height: 1920px;
+  transform-origin: 0 0;
+  display: none;
+  flex-direction: column;
+  overflow-y: auto;
+  box-sizing: border-box;
+  /* padding 없음: 배경 그래픽이 가장자리까지 100% 꽉 차야 하므로,
+     여백은 아래 텍스트 요소들(.detail-close, .b1-title, .b1-info 등)에서
+     var(--detail-pad)로 개별 적용한다. */
+}
+
+.cell.is-active .cell-detail {
+  display: flex;
+  filter: url(#melt-filter); /* 시간 경과에 따라 main.js가 필터 강도를 갱신함 */
+}
+.cell.is-active .cell-summary {
+  display: none;
+}
+
+/* 시간에 따라 선명해지는 노이즈(그레인) 오버레이. main.js가 opacity를 갱신함 */
+.cell-melt-grain {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  pointer-events: none;
+  opacity: 0;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  background-size: 180px 180px;
+}
+
+.detail-close {
+  position: absolute;
+  top: var(--detail-pad);
+  right: var(--detail-pad);
+  z-index: 100; /* 콜라주 이미지, 그라디언트 등 배경 위에 뜨도록 */
+  width: 44px;
+  height: 44px;
+  /* border-radius: 50%; */
+  border: none;
+  background: rgba(0, 0, 0);
+  color: #ffffff;
+  font-size: 44px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.detail-close:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+/* 공용 타이틀/이미지 영역: blue-1처럼 자체 타이틀을 그리는 화면에서
+   불필요한 상단 여백을 만들지 않도록 항상 숨긴다. */
+.detail-title,
+.detail-title-images {
+  display: none;
+}
+
+.detail-title {
+  margin: 24px 0 12px;
+  font-size: 90px;
+  font-weight: 800;
+  color: rgba(0, 0, 0, 0.8);
+  flex-shrink: 0;
+  white-space: pre-line;
+}
+
+.detail-body {
+  display: flex;
+  flex-direction: column;
+  font-size: 16px;
+  line-height: 1.7;
+  color: rgba(0, 0, 0, 0.72);
+  flex: 1;
+  min-height: 0;
+}
+
+.detail-loading {
+  opacity: 0.6;
+}
+.detail-note {
+  margin-top: 12px;
+  font-size: 13px;
+  opacity: 0.6;
+}
+
+/* 캔버스 하나가 펼쳐져 있는 동안 다른 칸은 클릭 비활성화 */
+#canvas.is-expanded .cell:not(.is-active) {
+  pointer-events: none;
+}
+
+/* ================= 재사용 컴포넌트 ================= */
+
+/* ---- 탭 ---- */
+.tabs-nav {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.tabs-btn {
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(0, 0, 0, 0.08);
+  color: rgba(0, 0, 0, 0.7);
+  font-weight: 600;
+  cursor: pointer;
+}
+.tabs-btn.is-active {
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+}
+.tabs-panel {
+  display: none;
+}
+.tabs-panel.is-active {
+  display: block;
+}
+
+/* 타이틀(또는 본문) 중 특정 단어만 강조하는 공용 스타일 — 모든 화면에서 재사용 */
+.title-highlight {
+  background: #fff;
+  color: #000;
+  padding: 0 4px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/* ===== blue-1: 엄마를 사진으로 동결건조하기 ===== */
+.b1-wrap {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  gap: 0;
+}
+
+.b1-left {
+  flex: 0 0 850px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.b1-right {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 우측 최상단: 텍스트 없는 순수 배경 블록 → 패딩 필요 없음, 가장자리까지 꽉 채움 */
+.b1-right-top {
+  flex: 0 0 540px; /* 좌측 타이틀 높이와 맞춰서 조정하세요 */
+  background: linear-gradient(270deg, #66f5ff 0%, #fff 100%);
+}
+
+/* 우측 하단: 배경은 꽉 채우고, 안의 .b1-info에만 패딩 적용 */
+.b1-right-bottom {
+  flex: 1;
+  background: linear-gradient(167deg, #0ef 6.8%, rgba(255, 255, 255) 85.37%);
+}
+
+.b1-info {
+  padding: var(--detail-pad);
+}
+.b1-info p {
+  margin: 0 0 6px;
+  font-size: 26px;
+  font-family: "OnulDanjo-Regular", sans-serif;
+  font-weight: 700;
+  color: #000;
+}
+.b1-info-date {
+  font-weight: 500;
+}
+
+/* 좌측 최상단: 타이틀 (배경 없는 영역이라 패딩을 직접 줘도 무방) */
+.b1-title {
+  font-family: "OnulDanjo-ExtraBold", "DesignMag Sans", sans-serif;
+  font-weight: 800;
+  height: 400px;
+  color: #000;
+  font-size: 96px;
+  line-height: 1.25;
+  margin: 0 0 80px;
+  margin-top: 60px; /* 상단 여백은 blue-1과 달리 20px로 줄임 */
+  text-decoration-line: underline;
+  text-decoration-style: solid;
+  text-decoration-skip-ink: auto;
+  text-decoration-thickness: 4px;
+  text-underline-offset: auto;
+  text-underline-position: from-font;
+  padding: var(--detail-pad) var(--detail-pad) 0;
+}
+
+/* 좌측 중간: 사진 + 돋보기 */
+.b1-stage {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.b1-photo-frame {
+  position: relative;
+  width: 100%;
+  height: 800px;
+  overflow: hidden;
+  cursor: none; /* 기본 커서 대신 돋보기가 커서 역할을 함 */
+}
+
+.b1-photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  filter: grayscale(1); /* 흑백톤. 원본 색을 쓰려면 이 줄 삭제 */
+}
+
+.b1-lens {
+  position: absolute;
+  width: 260px;
+  height: 260px;
+  border: 7px solid #ff00fb;
+  background-color: #fff;
+  background-repeat: no-repeat;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+/* 돋보기 네 모서리 트임 표시 */
+.b1-lens::before,
+.b1-lens::after {
+  content: "";
+  position: absolute;
+  border: 7px solid #ff00fb;
+}
+.b1-lens::before {
+  left: 50%;
+  top: -10px;
+  width: 2px;
+  height: 16px;
+  transform: translateX(-50%);
+}
+.b1-lens::after {
+  left: 50%;
+  bottom: -10px;
+  width: 2px;
+  height: 16px;
+  transform: translateX(-50%);
+}
+
+.b1-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 70px;
+  height: 70px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0);
+  color: rgb(0, 255, 242);
+  font-size: 60px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.b1-arrow-prev {
+  left: 16px;
+}
+.b1-arrow-next {
+  right: 16px;
+}
+
+/* 좌측 최하단: 배경(.b1-desc-wrap)은 좌우 var(--detail-pad)만큼만 안쪽에서 채워짐.
+   위아래는 기존 디자인의 20px 그대로 유지. */
+.b1-desc-wrap {
+  flex: 1;
+  padding: 20px var(--detail-pad);
+  background: linear-gradient(180deg, #1bf0ff 0%, rgba(255, 255, 255) 82.65%);
+}
+
+.b1-desc {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: #000;
+  min-height: 3em;
+}
+
+/* ===== green: 엄마를 글로 동결건조하기 ===== */
+.g-wrap {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+}
+
+/* 상단 행: 타이틀(좌) + 빈 그라디언트 칸(우) */
+.g-top {
+  display: flex;
+  flex-direction: row;
+
+  flex-shrink: 0;
+}
+
+.g-title {
+  flex: 2;
+  min-width: 0;
+  font-family: "OnulDanjo-ExtraBold", "DesignMag Sans", sans-serif;
+  font-weight: 800;
+  color: #000;
+  font-size: 96px;
+  margin: 0 0 80px;
+  margin-top: 60px;
+  line-height: 1.25;
+  text-decoration-line: underline;
+  text-decoration-style: solid;
+  text-decoration-skip-ink: auto;
+  text-decoration-thickness: 4px;
+  text-underline-offset: auto;
+  text-underline-position: from-font;
+  padding: var(--detail-pad) var(--detail-pad) 0;
+}
+
+/* 우측: 텍스트 없이 색만 있는 칸. 원하는 그라디언트로 자유롭게 바꾸세요 */
+.g-top-right {
+  flex: 1;
+  min-width: 0;
+  background: linear-gradient(267deg, #fff 4.52%, #00ff2c 154.83%);
+}
+
+/* 2x2 카드 그리드. --g-col/--g-row는 JS가 드래그에 맞춰 갱신하는 분할 비율(%) */
+.g-cards {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: var(--g-col, 50%) 1fr;
+  grid-template-rows: var(--g-row, 50%) 1fr;
+  /* gap: 2px; */
+}
+
+.g-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0; /* flex 자식이 내용물 때문에 넘치지 않고 스크롤되게 하는 핵심 */
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* 좌상단 */
+
+.g-card:nth-child(1) {
+  background: linear-gradient(
+    270deg,
+    #00ff2c -22.42%,
+    rgba(255, 255, 255) 99.81%
+  );
+}
+
+/* 우상단 */
+
+.g-card:nth-child(2) {
+  background: linear-gradient(
+    270deg,
+    #00ff2c -22.42%,
+    rgba(255, 255, 255) 99.81%
+  );
+}
+
+/* 좌하단 */
+
+.g-card:nth-child(3) {
+  background: linear-gradient(94deg, #00ff2c 3.03%, rgba(255, 255, 255) 96.05%);
+}
+
+/* 우하단 */
+
+.g-card:nth-child(4) {
+  background: linear-gradient(
+    151deg,
+    #00ff2c 6.34%,
+    rgba(255, 255, 255) 64.52%
+  );
+}
+
+.g-card-dot {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #000;
+  margin: var(--detail-pad) 0 20px var(--detail-pad);
+}
+
+/* 칸별로 독립적으로 스크롤되는 본문 영역 */
+.g-card-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 var(--detail-pad) var(--detail-pad);
+  scrollbar-width: thin;
+}
+
+.g-card-text {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.7;
+  color: #000;
+}
+
+/* ---- 리사이즈 핸들 ---- */
+.g-divider {
+  position: absolute;
+  z-index: 5;
+  background: transparent;
+}
+.g-divider-x {
+  top: 0;
+  bottom: 0;
+  width: 12px;
+  transform: translateX(-50%);
+  cursor: col-resize;
+}
+.g-divider-y {
+  left: 0;
+  right: 0;
+  height: 12px;
+  transform: translateY(-50%);
+  cursor: row-resize;
+}
+.g-divider-xy {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  cursor: move;
+}
+.g-divider-x:hover,
+.g-divider-y:hover,
+.g-divider-xy:hover {
+  background: rgba(255, 0, 200, 0.18);
+}
+
+/* ===== pink-2: 엄마를 질감으로 동결건조하기 ===== */
+.p2-wrap {
+  position: relative; /* .p2-view의 절대 위치 기준점 — 타이틀 영역까지 포함해 전체를 덮게 함 */
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+}
+.p2-top {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr; /* .p2-cards와 동일한 값 직접 명시 */
+  flex-shrink: 0;
+}
+
+.p2-title {
+  font-family: "OnulDanjo-ExtraBold", "DesignMag Sans", sans-serif;
+  font-weight: 800;
+  color: #000;
+  font-size: 94px;
+  line-height: 1.25;
+  text-decoration-line: underline;
+  text-decoration-thickness: 4px;
+  text-underline-offset: auto;
+  padding: var(--detail-pad) var(--detail-pad) 0;
+  margin: 0 0 80px;
+  margin-top: 60px;
+  flex-shrink: 0;
+}
+
+.p2-top-right {
+  min-width: 0;
+  background: linear-gradient(180deg, #ff2fc4 0%, rgba(255, 255, 255) 100%);
+}
+
+.p2-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.p2-cards {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: 1.5fr 1fr; /* 직접 명시 — 변수 의존 없음 */
+  grid-template-rows: 1fr 1.5fr;
+}
+
+.p2-card {
+  position: relative;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  overflow: hidden;
+  background: white; /* .cell-pink 배경이 그대로 비침 */
+}
+
+/* 좌상단 (1번) */
+.p2-card:nth-child(1) {
+  background: linear-gradient(
+    270deg,
+    #ff00bf -22.42%,
+    rgba(255, 255, 255) 99.81%
+  );
+}
+/* 우상단 (2번) */
+.p2-card:nth-child(2) {
+  background: linear-gradient(
+    270deg,
+    #ff00bf -22.42%,
+    rgba(255, 255, 255) 99.81%
+  );
+}
+/* 좌하단 (3번) */
+.p2-card:nth-child(3) {
+  background: linear-gradient(
+    89deg,
+    #ff00bf -15.01%,
+    rgba(255, 255, 255) 115.91%
+  );
+}
+/* 우하단 (4번) */
+.p2-card:nth-child(4) {
+  background: linear-gradient(
+    151deg,
+    #ff00bf 6.34%,
+    rgba(255, 255, 255) 64.52%
+  );
+}
+.p2-card:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* 흐릿한 큰 숫자 (배경 워터마크 느낌) */
+/* .p2-card-num {
+  position: absolute;
+  right: 8%;
+  bottom: -4%;
+  font-family: "OnulDanjo-Regular", sans-serif;
+  font-weight: 800;
+  font-size: 140px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.55);
+  pointer-events: none;
+  user-select: none;
+} */
+
+/* 구멍(흰 원) */
+.p2-dots {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.p2-dot {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #fff;
+  transform: translate(-50%, -50%);
+}
+.p2-dot.is-connector {
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.15);
+} /* 연결 지점 구분용, 필요 없으면 삭제 */
+
+/* 실(선) 레이어 — 카드들 위에 겹쳐서 구멍끼리 연결 */
+.p2-thread-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+}
+.p2-thread-line {
+  stroke: #000;
+  stroke-width: 16;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/* 카드 클릭 시 뜨는 상세 뷰. .p2-wrap 기준으로 타이틀 영역까지 포함한 전체를 덮는다. */
+.p2-view {
+  position: absolute;
+  inset: 0;
+  z-index: 20; /* 타이틀/카드/실선보다 위에 뜨도록 넉넉하게 */
+  display: flex;
+  flex-direction: column;
+  background: #fff; /* 밑에 있는 카드가 비치지 않도록 */
+}
+.p2-view[hidden] {
+  display: none;
+}
+
+.p2-view-back {
+  align-self: flex-start;
+  margin: 20px;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.15);
+  font-size: 14px;
+  cursor: pointer;
+}
+.p2-view-back:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+/* 배경 두 칸(사진용/텍스트용) + 그 위에 겹쳐진 스크롤 레이어 — yellow와 동일한 패턴 */
+.p2-view-bottom {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 2fr 1fr; /* .p2-cards와 같은 비율로 통일 */
+}
+
+.p2-view-bg {
+  min-width: 0;
+}
+.p2-view-bg-photo {
+  background: linear-gradient(200deg, #ff2fc4 0%, rgba(255, 255, 255, 0) 70%);
+}
+.p2-view-bg-text {
+  background: radial-gradient(120% 120% at 100% 0%, #fff 0%, #ff2fc4 100%);
+}
+
+.p2-view-rows {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--detail-pad) 0;
+}
+
+.p2-view-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr; /* 배경과 동일한 비율 */
+  align-items: start; /* 사진 시작 = 텍스트 시작 */
+  min-width: 0;
+  margin-bottom: 40px;
+}
+.p2-view-row:last-child {
+  margin-bottom: 0;
+}
+
+.p2-view-photo,
+.p2-view-text {
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 var(--detail-pad);
+}
+.p2-view-photo img {
+  width: 100%;
+  display: block;
+  filter: grayscale(1);
+}
+
+.p2-view-text {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.7;
+  color: #000;
+  overflow-wrap: break-word;
+  word-break: keep-all;
+}
+
+/* ===== yellow: 엄마를 대화로 동결건조하기 ===== */
+.y-wrap {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+}
+
+/* 상단 행: 타이틀(좌) + 빈 색상 칸(우) — green의 .g-top과 동일한 패턴 */
+.y-top {
+  display: grid;
+  grid-template-columns: var(--y-cols);
+  flex-shrink: 0;
+}
+
+.y-title {
+  min-width: 0;
+  font-family: "OnulDanjo-ExtraBold", "DesignMag Sans", sans-serif;
+  font-weight: 800;
+  color: #000;
+  font-size: 96px;
+  line-height: 1.25;
+  text-decoration-line: underline;
+  text-decoration-style: solid;
+  text-decoration-skip-ink: auto;
+  text-decoration-thickness: 4px;
+  text-underline-offset: auto;
+  text-underline-position: from-font;
+  padding: var(--detail-pad) var(--detail-pad) 0;
+  margin: 0 0 80px;
+  margin-top: 60px;
+}
+
+.y-top-right {
+  min-width: 0;
+  background: linear-gradient(267deg, #fff 4.52%, #fe0 154.83%);
+}
+
+/* 하단 행: 답변(좌) + 질문(우), 두 칸 모두 독립 스크롤 */
+/* 하단 행: 배경은 좌/우 색상 칸 2개, 콘텐츠는 그 위에 겹쳐진 하나의 스크롤 레이어 */
+.y-bottom {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--y-cols); /* .y-top과 동일한 비율 사용 */
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.y-bottom-bg {
+  min-width: 0;
+}
+
+.y-answer {
+  background: linear-gradient(
+    270deg,
+    #fe0 -22.42%,
+    rgba(255, 255, 255, 0) 99.81%
+  );
+}
+.y-question {
+  background: linear-gradient(
+    270deg,
+    #fe0 -22.42%,
+    rgba(255, 255, 255, 0) 99.81%
+  );
+}
+
+/* 콘텐츠 레이어: 배경 두 칸 위에 겹쳐서 하나의 스크롤로 움직임 */
+.y-rows {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overflow-x: hidden; /* 가로로는 절대 넘치지 않도록 */
+  padding: var(--detail-pad) 0;
+  scrollbar-width: thin;
+}
+
+.y-row {
+  display: grid;
+  grid-template-columns: var(--y-cols); /* 1fr 1fr → var(--y-cols)로 수정 */
+  align-items: start;
+  margin-bottom: 40px;
+}
+.y-row:last-child {
+  margin-bottom: 0;
+}
+
+.y-row-answer,
+.y-row-question {
+  margin: 0;
+  padding: 0 var(--detail-pad);
+  font-size: 25px;
+  line-height: 1.7;
+  color: #000;
+  overflow: hidden;
+}
+
+.y-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0; /* flex 자식이 넘치지 않고 내부 스크롤되게 하는 핵심 */
+  overflow: hidden;
+}
+
+/* 좌하단: 답변 */
+.y-answer {
+  background: linear-gradient(270deg, #fe0 -22.42%, rgba(255, 255, 255) 99.81%);
+}
+
+/* 우하단: 질문 */
+.y-question {
+  background: linear-gradient(270deg, #fe0 -22.42%, rgba(255, 255, 255) 99.81%);
+}
+
+/* 칸별로 독립적으로 스크롤되는 본문 영역 */
+.y-card-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--detail-pad);
+  scrollbar-width: thin;
+}
+
+.y-card-text {
+  margin: 0 0 32px;
+  font-size: 20px;
+  line-height: 1.7;
+  color: #000;
+}
+.y-card-text:last-child {
+  margin-bottom: 0;
+}
+
+/* ===== blue-2: 엄마를 영상으로 동결건조하기 ===== */
+.b2-wrap {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+}
+
+/* 고정 영역: 타이틀 + 영상 + 필름스트립. 스크롤되지 않고 항상 화면에 보임 */
+.b2-top {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.b2-title {
+  font-family: "OnulDanjo-ExtraBold", "DesignMag Sans", sans-serif;
+  font-weight: 800;
+  color: #000;
+  font-size: 94px;
+  line-height: 1.25;
+  text-decoration-line: underline;
+  text-decoration-thickness: 4px;
+  text-underline-offset: auto;
+  padding: var(--detail-pad) var(--detail-pad) 0;
+  margin: 0 0 80px;
+  margin-top: 60px;
+  flex-shrink: 0;
+}
+
+.b2-video {
+  position: relative;
+  flex-shrink: 0;
+  height: 560px;
+  overflow: hidden;
+  background: #000;
+}
+
+.b2-video-el {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  filter: grayscale(1); /* 흑백 재생 */
+  filter: grayscale(1) contrast(1.15) brightness(0.95) blur(0.4px);
+}
+
+.b2-play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 64px;
+  height: 64px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+  font-size: 22px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.b2-play:hover {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+/* 영상 프레임 칸: 실제 프레임을 드래그로 스크러빙 */
+.b2-filmstrip {
+  position: relative;
+  flex-shrink: 0;
+  height: 72px;
+  overflow: hidden;
+  background: #000;
+  cursor: grab;
+  touch-action: none; /* 브라우저 기본 스크롤/줌 제스처와 충돌 방지 */
+}
+.b2-filmstrip.is-dragging {
+  cursor: grabbing;
+}
+
+.b2-filmstrip-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+/* 화면 정중앙에 고정된 재생 위치 표시선 */
+.b2-filmstrip-playhead {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1%;
+  background: #ff00d0;
+  transform: translateX(-50%);
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* 프레임들이 나열되는 띠. JS가 translateX로 좌우 이동시킴 */
+.b2-filmstrip-track {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  display: flex;
+  will-change: transform;
+}
+
+.b2-frame-img {
+  width: 96px;
+  height: 72px;
+  object-fit: cover;
+  display: block;
+  pointer-events: none; /* 드래그가 이미지 자체가 아니라 filmstrip 전체에서 일어나도록 */
+  user-select: none;
+  -webkit-user-drag: none;
+  filter: grayscale(1); /* 필름스트립도 재생 영상과 통일감 있게 흑백 */
+}
+
+/* 스크롤 영역: 설명 텍스트 + 재생 진행에 따라 누적되는 프레임 이미지들 */
+.b2-desc-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px var(--detail-pad);
+  background: linear-gradient(
+    180deg,
+    #66f5ff 0%,
+    rgba(255, 255, 255, 0) 82.65%
+  );
+  scrollbar-width: thin;
+}
+
+.b2-desc {
+  margin: 0 0 20px;
+  font-size: 24px;
+  font-weight: 700;
+  color: #000;
+}
+
+/* 재생 시간이 HIGHLIGHT_TIMES 지점을 지날 때마다 이미지가 하나씩 아래로 누적됨.
+   되감으면 그 시점 이후 이미지는 뒤에서부터 다시 제거된다(blue-2.js의 syncHighlights). */
+.b2-reveal-track {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.b2-reveal-item {
+  display: flex;
+  flex-direction: column;
+}
+.b2-reveal-item img {
+  width: 100%;
+
+  filter: grayscale(1);
+  display: block;
+}
+.b2-reveal-label {
+  margin-top: 6px;
+  font-size: 14px;
+  color: #000;
+}
+
+/* ===== purple: 엄마를 무늬로 동결건조하기 ===== */
+.pu-wrap {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+}
+
+.pu-top {
+  display: grid;
+  grid-template-columns: var(--pu-cols);
+  flex-shrink: 0;
+}
+
+.pu-title {
+  min-width: 0;
+  font-family: "OnulDanjo-ExtraBold", "DesignMag Sans", sans-serif;
+  font-weight: 800;
+  color: #000;
+  font-size: 94px;
+  line-height: 1.25;
+  text-decoration-line: underline;
+  text-decoration-thickness: 4px;
+  text-underline-offset: auto;
+  padding: var(--detail-pad) var(--detail-pad) 0;
+  margin: 60px 0 80px 0;
+}
+
+.pu-top-right {
+  min-width: 0;
+  background: linear-gradient(180deg, #cd3fff 0%, rgba(255, 255, 255) 100%);
+}
+
+/* 중단 행: 좌측 결과물 + 우측(갤러리+버튼) */
+.pu-main {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+}
+
+/* 좌측: 생성된 이미지가 표시되는 영역. 비어있으면 체크무늬로 "투명/미생성"을 표시 */
+.pu-output {
+  flex: 2;
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+  background-color: #eee;
+  background-image:
+    linear-gradient(45deg, #ddd 25%, transparent 25%),
+    linear-gradient(-45deg, #ddd 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #ddd 75%),
+    linear-gradient(-45deg, transparent 75%, #ddd 75%);
+  background-size: 32px 32px;
+  background-position:
+    0 0,
+    0 16px,
+    16px -16px,
+    -16px 0px;
+}
+.pu-output.has-image {
+  background-image: none; /* 이미지가 생성되면 체크무늬 배경 제거 */
+}
+
+.pu-output-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 우측 컬럼: 갤러리 + make 버튼 */
+.pu-right {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(
+    270deg,
+    #bd00ff -22.42%,
+    rgba(255, 255, 255, 0) 99.81%
+  );
+}
+
+/* 우측 2번째: 소스 이미지 목록, 클릭으로 다중 선택 */
+.pu-gallery {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--detail-pad);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  align-content: start;
+  scrollbar-width: thin;
+}
+
+.pu-thumb {
+  position: relative;
+  padding: 0;
+  /* border: 3px solid transparent; */
+  cursor: pointer;
+  overflow: hidden;
+  aspect-ratio: 1 / 1;
+}
+.pu-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.pu-thumb.is-selected {
+  border-color: #ffffff;
+  border-weight: 10px;
+}
+.pu-thumb.is-selected::after {
+  border-color: #ffffff;
+  border-weight: 10px;
+}
+
+/* 우측 3번째: make 버튼 */
+.pu-make {
+  flex-shrink: 0;
+  /* margin: var(--detail-pad); */
+  padding: 90px;
+  border: none;
+  background: #000;
+  color: #fff;
+
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  font-family: "DesignMag Sans", sans-serif;
+  font-size: 80px;
+}
+.pu-make:hover {
+  background: #222;
+}
+.pu-make:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* 최하단: 그라디언트 이미지 */
+.pu-bottom {
+  flex-shrink: 0;
+  height: 200px;
+  background: linear-gradient(
+    151deg,
+    #bd00ff 6.34%,
+    rgba(255, 255, 255, 0) 64.52%
+  );
+}
+
+/* 텍스트 안의 주석 대상 단어/구절 */
+.g-annot {
+  cursor: help;
+  border-bottom: 1px dashed rgba(0, 0, 0, 0.5);
+  color: #ff00c8;
+}
+
+/* 커서를 따라다니는 툴팁 박스 */
+.g-tooltip {
+  position: absolute;
+  z-index: 20;
+  max-width: 500px;
+  padding: 17px 15px;
+  background: #000;
+  color: #fff;
+  font-size: 20px;
+  line-height: 1.5;
+  pointer-events: none; /* 툴팁 자체는 마우스 이벤트를 가로채지 않음 */
+  white-space: pre-line;
+}
+.g-tooltip[hidden] {
+  display: none;
+}
+
+/* ===== pink-1: 엄마를 향으로 동결건조하기 ===== */
+.p1-wrap {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+}
+
+/* 상단 행: 타이틀(좌) + 빈 그라디언트 칸(우) — green/yellow/purple과 동일한 패턴 */
+.p1-top {
+  display: grid;
+  grid-template-columns: 2fr 1fr; /* 좌:우 비율. 원하는 비율로 조정 가능 */
+  flex-shrink: 0;
+}
+
+.p1-title {
+  font-family: "OnulDanjo-ExtraBold", "DesignMag Sans", sans-serif;
+  font-weight: 800;
+  color: #000;
+  font-size: 94px;
+  line-height: 1.25;
+  text-decoration-line: underline;
+  text-decoration-thickness: 4px;
+  text-underline-offset: auto;
+  padding: var(--detail-pad) var(--detail-pad) 0;
+  margin: 0 0 80px;
+  margin-top: 60px;
+  min-width: 0;
+}
+
+/* 우측: 텍스트/기능 없는 순수 그라디언트 칸 */
+.p1-top-right {
+  min-width: 0;
+  background: linear-gradient(267deg, #fff 4.52%, #ff00bf 154.83%);
+}
+
+/* 칸이 채워지는 전체 영역. overflow:hidden이 있어야 칸이 밀려들어오는
+   애니메이션 중 화면 밖에 있는 부분이 안 보인다. */
+.p1-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.p1-grid {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  grid-template-rows: 1fr 1.6fr;
+  grid-template-areas:
+    "tl tr"
+    "bl br";
+}
+
+.p1-cell {
+  position: relative;
+  overflow: hidden;
+  /* 칸 자체는 더 이상 움직이지 않는다 — 항상 제자리에 고정된 그릇.
+     grid-area만 위치별로 지정해 .p1-grid의 template-areas와 연결한다. */
+}
+.p1-cell[data-pos="tl"] {
+  grid-area: tl;
+}
+.p1-cell[data-pos="tr"] {
+  grid-area: tr;
+}
+.p1-cell[data-pos="bl"] {
+  grid-area: bl;
+}
+.p1-cell[data-pos="br"] {
+  grid-area: br;
+}
+
+/* 칸마다 쌓이는 레이어. 클릭할 때마다 새로 생성되어 기존 레이어 위에 덮인다.
+   DOM에서 나중에 추가된 요소가 자동으로 위에 그려지므로 z-index가 필요 없다. */
+.p1-layer {
+  position: absolute;
+  inset: 0;
+  transition: transform 0.5s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* 레이어의 시작(화면 밖) 위치 — 칸 위치에 따라 옆/아래에서 들어오는 방향을 다르게 */
+.p1-layer-tl {
+  transform: translateX(-100%);
+}
+.p1-layer-tr {
+  transform: translateX(100%);
+}
+.p1-layer-bl {
+  transform: translateY(100%);
+}
+.p1-layer-br {
+  transform: translateY(100%);
+}
+
+.p1-layer.is-active {
+  transform: translate(0, 0);
+}
+
+.p1-layer-inner {
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--detail-pad);
+  scrollbar-width: thin;
+}
+
+.p1-cell-heading {
+  margin: 0 0 8px;
+  font-size: 35px;
+  font-weight: 800;
+}
+
+.p1-cell-body {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.6;
+}
+
+/* 안내 문구: 첫 클릭 전까지만 보임 */
+.p1-info {
+  position: absolute;
+  top: var(--detail-pad);
+  left: var(--detail-pad);
+  z-index: 2;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.p1-info p {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #000;
+  line-height: 1.5;
+}
+.p1-info.is-hidden {
+  opacity: 0;
+}
+
+/* .p1-stage 하단에 겹쳐서 떠 있는 디퓨저 버튼들.
+   더 이상 별도 공간을 차지하지 않고, 하단 칸(bl/br)의 배경 위에
+   투명하게 레이어링된다. */
+.p1-diffusers {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 6;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+  padding: 24px var(--detail-pad) var(--detail-pad);
+  background: transparent; /* 배경 없음 — 밑에 깔린 칸의 배경이 그대로 비침 */
+  pointer-events: none; /* 버튼 자체 외의 빈 여백은 클릭을 가로채지 않음 */
+}
+
+.p1-diffuser-btn {
+  pointer-events: auto; /* 버튼 자체는 정상적으로 클릭 가능 */
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+.p1-diffuser-btn img {
+  width: 320px;
+  height: 360px;
+  display: block;
+}
+.p1-diffuser-btn:hover {
+  opacity: 0.85;
+}
